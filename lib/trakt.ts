@@ -127,6 +127,47 @@ export class TraktAPI {
     const response = await traktApi.get(`/shows/${traktId}/seasons?extended=episodes`)
     return response.data
   }
+
+  async getShowByTMDBId(tmdbId: number): Promise<TraktShow | null> {
+    try {
+      const response = await traktApi.get(`/search/tmdb/${tmdbId}?type=show`)
+      if (response.data && response.data.length > 0) {
+        return response.data[0].show
+      }
+      return null
+    } catch (error) {
+      console.error(`Error fetching show by TMDB ID ${tmdbId}:`, error)
+      return null
+    }
+  }
+
+  async getShowByTVDBId(tvdbId: number): Promise<TraktShow | null> {
+    try {
+      const response = await traktApi.get(`/search/tvdb/${tvdbId}?type=show`)
+      if (response.data && response.data.length > 0) {
+        return response.data[0].show
+      }
+      return null
+    } catch (error) {
+      console.error(`Error fetching show by TVDB ID ${tvdbId}:`, error)
+      return null
+    }
+  }
+
+  async getSeasonEpisodes(traktId: number, seasonNumber: number): Promise<TraktEpisode[]> {
+    try {
+      const response = await traktApi.get(`/shows/${traktId}/seasons/${seasonNumber}/episodes?extended=full`)
+      return response.data
+    } catch (error) {
+      console.error(`Error fetching season ${seasonNumber} episodes for show ${traktId}:`, error)
+      return []
+    }
+  }
+
+  async getEpisode(traktId: number, seasonNumber: number, episodeNumber: number): Promise<TraktEpisode> {
+    const response = await traktApi.get(`/shows/${traktId}/seasons/${seasonNumber}/episodes/${episodeNumber}?extended=full`)
+    return response.data
+  }
 }
 
 export const traktAPI = new TraktAPI()

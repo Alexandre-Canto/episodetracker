@@ -16,6 +16,16 @@ services:
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
       - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET}
       - TMDB_API_KEY=${TMDB_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PLEX_CLIENT_ID=${PLEX_CLIENT_ID:-episodetracker}
+      - PLEX_PRODUCT=${PLEX_PRODUCT:-Episode Tracker}
+      - INTEGRATION_ENCRYPTION_KEY=${INTEGRATION_ENCRYPTION_KEY}
+      - ENABLE_SCHEDULER=true
+      - SYNC_ON_STARTUP=${SYNC_ON_STARTUP:-false}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4000,https://episodetracker.homelab-canto.pt}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     depends_on:
       db:
         condition: service_healthy

@@ -22,6 +22,9 @@ model User {
   userShows     UserShow[]
   userSeasons   UserSeason[]
   userEpisodes  UserEpisode[]
+  aiRecommendations AIRecommendation[]
+  integrations  Integration[]
+  syncLogs      SyncLog[]
 
   @@map("users")
 }
@@ -137,4 +140,58 @@ model UserEpisode {
 
   @@unique([userId, episodeId])
   @@map("user_episodes")
+}
+
+model AIRecommendation {
+  id        String   @id @default(cuid())
+  userId    String
+  recommendations Json // Stores the full recommendations array
+  basedOn   Int      // Number of shows it was based on
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@map("ai_recommendations")
+}
+
+model Integration {
+  id             String   @id @default(cuid())
+  userId         String
+  provider       String   // "plex" or "jellyfin"
+  serverUrl      String
+  accessToken    String   @db.Text // Encrypted Plex token or Jellyfin API key
+  plexUsername   String?  // Plex username for display
+  plexEmail      String?  // Plex email
+  serverName     String?  // Friendly server name
+  lastSync       DateTime?
+  enabled        Boolean  @default(true)
+  autoSync       Boolean  @default(false) // Auto-sync on schedule
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("integrations")
+}
+
+model SyncLog {
+  id             String   @id @default(cuid())
+  userId         String
+  provider       String   // "plex" or "jellyfin"
+  status         String   // "success", "error", "partial"
+  showsSynced    Int      @default(0)
+  episodesSynced Int      @default(0)
+  errors         Json?    // Array of error messages
+  duration       Int?     // Sync duration in milliseconds
+  syncedAt       DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sync_logs")
 }

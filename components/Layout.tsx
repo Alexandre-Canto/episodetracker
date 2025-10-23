@@ -17,6 +17,9 @@ import {
   Menu,
   X,
   Play,
+  Sparkles,
+  Link as LinkIcon,
+  User,
 } from 'lucide-react'
 
 interface LayoutProps {
@@ -39,7 +42,9 @@ export default function Layout({ children }: LayoutProps) {
     { text: 'Unwatched', icon: Eye, path: '/unwatched' },
     { text: 'My Shows', icon: Tv, path: '/shows' },
     { text: 'Browse', icon: Search, path: '/browse' },
-    { text: 'Profile', icon: Settings, path: '/profile' },
+    { text: 'AI Recommendations', icon: Sparkles, path: '/recommendations' },
+    { text: 'Integrations', icon: LinkIcon, path: '/integrations' },
+    { text: 'Profile', icon: User, path: '/profile' },
   ]
 
   const SidebarContent = () => (

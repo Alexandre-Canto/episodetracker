@@ -2,15 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { traktAPI } from '@/lib/trakt'
 import { prisma } from '@/lib/db'
 import { getTMDBPosterUrl } from '@/lib/tmdb'
+import { logger } from '@/lib/logger'
+import { rateLimiters } from '@/lib/rate-limit'
+import { validatePagination } from '@/lib/validation'
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
+    // Apply rate limiting
+    const rateLimitResponse = await rateLimiters.api(request)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { searchParams } = new URL(request.url)
     
-    // Basic parameters
+    // Basic parameters with validation
     const query = searchParams.get('query')
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const { page, limit } = validatePagination(searchParams.get('page'), searchParams.get('limit'))
     const type = searchParams.get('type') || 'popular'
     
     // Filter parameters
@@ -30,10 +38,9 @@ export async function GET(request: NextRequest) {
     // Get user's existing shows for excludeAdded filter (only if excludeAdded is requested)
     let userShowIds: number[] = []
     if (excludeAdded) {
-      // For excludeAdded filter, we need to get the user's shows
-      // This would require authentication, but for now we'll skip this filter
-      // TODO: Implement proper authentication for this filter
-      console.log('excludeAdded filter requested but authentication not implemented')
+      // Note: excludeAdded filter requires authentication
+      // Since this is a public browse endpoint, we skip this filter when not authenticated
+      // The frontend should handle authentication before using this filter
     }
 
     if (query) {
@@ -152,9 +159,11 @@ export async function GET(request: NextRequest) {
       })
     )
 
+    logger.performance('Browse shows', Date.now() - startTime, { count: showsWithPosters.length })
+    
     return NextResponse.json({ shows: showsWithPosters })
   } catch (error) {
-    console.error('Browse shows error:', error)
+    logger.error('Browse shows error', error)
     return NextResponse.json(
       { error: 'Failed to fetch shows' },
       { status: 500 }

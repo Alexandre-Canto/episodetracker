@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/lib/auth-context'
+import SchedulerInit from '@/components/SchedulerInit'
 import './globals.css'
 
 export const metadata = {
@@ -15,6 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AuthProvider>
+          <SchedulerInit />
           {children}
         </AuthProvider>
       </body>

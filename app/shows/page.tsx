@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Loader2, AlertCircle, Tv, MoreVertical, CheckCircle, Grid3x3, List, Star } from 'lucide-react'
+import { Loader2, AlertCircle, Tv, MoreVertical, CheckCircle, Grid3x3, List, Star, Search, X } from 'lucide-react'
 
 interface Show {
   id: string
@@ -58,6 +59,7 @@ export default function ShowsPage() {
   const [error, setError] = useState('')
   const [updatingShow, setUpdatingShow] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetchShows()
@@ -125,6 +127,15 @@ export default function ShowsPage() {
     } finally {
       setUpdatingShow(null)
     }
+  }
+
+  // Filter shows based on search query
+  const filterShows = (showsList: any[]) => {
+    if (!searchQuery.trim()) return showsList
+    
+    return showsList.filter(userShow =>
+      userShow.show.title.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   }
 
   const renderStars = (rating: number | null | undefined) => {
@@ -384,6 +395,28 @@ export default function ShowsPage() {
             </div>
           </div>
 
+          {/* Search Bar */}
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search shows by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-10"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
+                onClick={() => setSearchQuery('')}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -394,38 +427,43 @@ export default function ShowsPage() {
           <Tabs defaultValue="ongoing" className="space-y-4">
             <TabsList>
               <TabsTrigger value="ongoing">
-                Current Shows ({shows.ongoing.length})
+                Current Shows ({filterShows(shows.ongoing).length}{searchQuery && ` of ${shows.ongoing.length}`})
               </TabsTrigger>
               <TabsTrigger value="watchlater">
-                Watch Later ({shows.watchlater.length})
+                Watch Later ({filterShows(shows.watchlater).length}{searchQuery && ` of ${shows.watchlater.length}`})
               </TabsTrigger>
               <TabsTrigger value="ended">
-                Ended ({shows.ended.length})
+                Ended ({filterShows(shows.ended).length}{searchQuery && ` of ${shows.ended.length}`})
               </TabsTrigger>
               <TabsTrigger value="archived">
-                Archived ({shows.archived.length})
+                Archived ({filterShows(shows.archived).length}{searchQuery && ` of ${shows.archived.length}`})
               </TabsTrigger>
             </TabsList>
 
-            {(['ongoing', 'watchlater', 'ended', 'archived'] as const).map((status) => (
+            {(['ongoing', 'watchlater', 'ended', 'archived'] as const).map((status) => {
+              const filteredShows = filterShows(shows[status])
+              return (
               <TabsContent key={status} value={status}>
-                {shows[status].length === 0 ? (
+                {filteredShows.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">
                       <Tv className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-lg font-medium">No shows in this category</p>
+                      <p className="text-lg font-medium">
+                        {searchQuery ? 'No shows match your search' : 'No shows in this category'}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Add shows from the Browse page
+                        {searchQuery ? 'Try a different search term' : 'Add shows from the Browse page'}
                       </p>
                     </CardContent>
                   </Card>
                 ) : viewMode === 'gallery' ? (
-                  renderGalleryView(shows[status], status)
+                  renderGalleryView(filteredShows, status)
                 ) : (
-                  renderListView(shows[status], status)
+                  renderListView(filteredShows, status)
                 )}
               </TabsContent>
-              ))}
+              )
+            })}
             </Tabs>
         </div>
       </Layout>
