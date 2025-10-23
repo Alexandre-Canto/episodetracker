@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userShows     UserShow[]
+  userSeasons   UserSeason[]
+  userEpisodes  UserEpisode[]
+
+  @@map("users")
+}
+
+model Show {
+  id        String   @id @default(cuid())
+  traktId   Int      @unique
+  title     String
+  overview  String?
+  poster    String?
+  status    String   // "airing", "ended", "canceled"
+  genres    String[] // Array of genre strings
+  network   String?
+  runtime   Int?     // Runtime in minutes
+  firstAired DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userShows UserShow[]
+  seasons   Season[]
+
+  @@map("shows")
+}
+
+model Season {
+  id           String   @id @default(cuid())
+  showId       String
+  seasonNumber Int
+  title        String?
+  overview     String?
+  airDate      DateTime?
+  episodeCount Int      @default(0)
+  traktId      Int?     @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  show         Show          @relation(fields: [showId], references: [id], onDelete: Cascade)
+  episodes     Episode[]
+  userSeasons  UserSeason[]
+
+  @@unique([showId, seasonNumber])
+  @@map("seasons")
+}
+
+model Episode {
+  id           String   @id @default(cuid())
+  seasonId     String
+  episodeNumber Int
+  title        String
+  airDate      DateTime?
+  traktId      Int?     @unique
+  overview     String?
+  runtime      Int?     // Runtime in minutes
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  season       Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  userEpisodes UserEpisode[]
+
+  @@unique([seasonId, episodeNumber])
+  @@map("episodes")
+}
+
+model UserShow {
+  id     String @id @default(cuid())
+  userId String
+  showId String
+  status String // "ongoing", "watchlater", "ended", "archived"
+  rating Int?   // User rating from 1-10
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  show Show @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, showId])
+  @@map("user_shows")
+}
+
+model UserSeason {
+  id        String   @id @default(cuid())
+  userId    String
+  seasonId  String
+  watched   Boolean  @default(false)
+  watchedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seasonId])
+  @@map("user_seasons")
+}
+
+model UserEpisode {
+  id        String   @id @default(cuid())
+  userId    String
+  episodeId String
+  watched   Boolean  @default(false)
+  watchedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeId])
+  @@map("user_episodes")
+}
