@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 
 export const GET = requireAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
-    // Get all watched episodes for the user
+    // Get all watched episodes for the user (both manually tracked and Plex-synced)
     const watchedEpisodes = await prisma.userEpisode.findMany({
       where: {
         userId: user.id,
@@ -22,9 +22,9 @@ export const GET = requireAuth(async (request: NextRequest, user: AuthenticatedU
         }
       },
       orderBy: {
-        updatedAt: 'desc'
+        watchedAt: 'desc' // Use watchedAt instead of updatedAt for better chronological order
       },
-      take: 100 // Limit to last 100 watched episodes
+      take: 200 // Increased limit to show more Plex-synced episodes
     })
 
     // Transform the data
@@ -33,7 +33,7 @@ export const GET = requireAuth(async (request: NextRequest, user: AuthenticatedU
       title: ue.episode.title,
       airDate: ue.episode.airDate,
       episodeNumber: ue.episode.episodeNumber,
-      watchedAt: ue.updatedAt,
+      watchedAt: ue.watchedAt || ue.updatedAt, // Use watchedAt from Plex sync if available
       show: {
         id: ue.episode.season.show.id,
         title: ue.episode.season.show.title,

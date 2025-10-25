@@ -4,7 +4,8 @@ import { prisma } from '@/lib/db'
 
 export const GET = requireAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   try {
-    // Get user's shows with unwatched episodes
+    // Get user's shows with unwatched episodes (both manually tracked and Plex-synced)
+    // Since Plex sync now automatically creates userShow entries, we only need to query userShows
     const userShows = await prisma.userShow.findMany({
       where: {
         userId: user.id,
@@ -33,15 +34,32 @@ export const GET = requireAuth(async (request: NextRequest, user: AuthenticatedU
       }
     })
 
+    console.log(`[Unwatched API] Found ${userShows.length} user shows for user ${user.id}`)
+    userShows.forEach(userShow => {
+      const totalEpisodes = userShow.show.seasons.reduce((total, season) => total + season.episodes.length, 0)
+      const watchedEpisodes = userShow.show.seasons.reduce((total, season) => 
+        total + season.episodes.filter(ep => ep.userEpisodes[0]?.watched).length, 0
+      )
+      console.log(`[Unwatched API] Show: ${userShow.show.title} - ${watchedEpisodes}/${totalEpisodes} episodes watched`)
+    })
+
     // Calculate unwatched episodes for each show
     const showsWithUnwatched = userShows.map(userShow => {
       // Flatten all episodes from all seasons
-      const allEpisodes = userShow.show.seasons.flatMap(season => season.episodes)
+      const allEpisodes = userShow.show.seasons.flatMap(season => 
+        season.episodes.map(episode => ({ ...episode, seasonNumber: season.seasonNumber }))
+      )
       
       const unwatchedEpisodes = allEpisodes.filter(episode => {
         const userEpisode = episode.userEpisodes[0]
-        return !userEpisode || !userEpisode.watched
+        const isUnwatched = !userEpisode || !userEpisode.watched
+        if (isUnwatched) {
+          console.log(`[Unwatched API] Unwatched episode: ${userShow.show.title} S${episode.seasonNumber}E${episode.episodeNumber} - ${episode.title}`)
+        }
+        return isUnwatched
       })
+
+      console.log(`[Unwatched API] Show: ${userShow.show.title} - ${unwatchedEpisodes.length} unwatched out of ${allEpisodes.length} total episodes`)
 
       // Transform seasons to match frontend expectations
       const transformedSeasons = userShow.show.seasons.map(season => ({

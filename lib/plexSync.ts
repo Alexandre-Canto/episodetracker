@@ -202,11 +202,17 @@ async function syncShow(
         status: 'ongoing'
       }
     })
+  } else {
+    console.log(`[Plex Sync] Show already in user library: ${show.title}`)
   }
 
-  // Sync episodes
+  // Sync episodes and create all episodes for the show
   console.log(`[Plex Sync] Syncing ${watchedEpisodes.length} watched episodes for ${show.title}`)
 
+  // ALWAYS create all seasons and episodes for the show, regardless of what was watched
+  await createAllShowEpisodes(show.id, traktShow.ids.trakt)
+
+  // Then mark only the watched episodes
   for (const plexEpisode of watchedEpisodes) {
     try {
       await syncEpisode(userId, show.id, traktShow.ids.trakt, plexEpisode)
@@ -214,6 +220,116 @@ async function syncShow(
       console.error(`[Plex Sync] Error syncing episode S${plexEpisode.parentIndex}E${plexEpisode.index}:`, error.message)
       // Continue with other episodes
     }
+  }
+}
+
+async function createAllShowEpisodes(showId: string, traktShowId: number): Promise<void> {
+  console.log(`[Plex Sync] Creating all episodes for show ${showId} (Trakt ID: ${traktShowId})`)
+  
+  try {
+    // Get all seasons for the show from Trakt
+    const seasons = await traktAPI.getShowSeasons(traktShowId)
+    console.log(`[Plex Sync] Found ${seasons.length} seasons for show ${showId}`)
+    
+    for (const seasonData of seasons) {
+      if (seasonData.number <= 0) continue // Skip specials
+      
+      const seasonNumber = seasonData.number
+      const seasonTraktId = seasonData.ids?.trakt
+      
+      console.log(`[Plex Sync] Processing season ${seasonNumber} (Trakt ID: ${seasonTraktId})`)
+      
+      // Check if season already exists (by Trakt ID or showId + seasonNumber)
+      let season = await prisma.season.findFirst({
+        where: {
+          OR: [
+            { traktId: seasonTraktId },
+            { 
+              AND: [
+                { showId },
+                { seasonNumber }
+              ]
+            }
+          ]
+        }
+      })
+      
+      if (!season) {
+        console.log(`[Plex Sync] Creating season ${seasonNumber} (Trakt ID: ${seasonTraktId}) for show ${showId}`)
+        
+        // Get episodes for this season
+        const traktSeason = await traktAPI.getSeasonEpisodes(traktShowId, seasonNumber)
+        console.log(`[Plex Sync] Found ${traktSeason.length} episodes for season ${seasonNumber}`)
+        
+        season = await prisma.season.create({
+          data: {
+            showId,
+            seasonNumber,
+            traktId: seasonTraktId,
+            title: seasonData.title,
+            overview: seasonData.overview,
+            airDate: seasonData.first_aired ? new Date(seasonData.first_aired) : null,
+            episodeCount: traktSeason.length
+          }
+        })
+        
+        // Create all episodes for this season
+        console.log(`[Plex Sync] Creating ${traktSeason.length} episodes for season ${seasonNumber}`)
+        for (const traktEpisode of traktSeason) {
+          try {
+            await prisma.episode.create({
+              data: {
+                seasonId: season.id,
+                episodeNumber: traktEpisode.number,
+                traktId: traktEpisode.ids?.trakt,
+                title: traktEpisode.title || `Episode ${traktEpisode.number}`,
+                overview: traktEpisode.overview,
+                airDate: traktEpisode.first_aired ? new Date(traktEpisode.first_aired) : null,
+                runtime: traktEpisode.runtime
+              }
+            })
+          } catch (error) {
+            console.error(`[Plex Sync] Error creating episode S${seasonNumber}E${traktEpisode.number}:`, error)
+          }
+        }
+      } else {
+        console.log(`[Plex Sync] Season ${seasonNumber} already exists for show ${showId}`)
+        
+        // Check if all episodes exist for this season
+        const existingEpisodes = await prisma.episode.count({
+          where: { seasonId: season.id }
+        })
+        
+        if (existingEpisodes === 0) {
+          console.log(`[Plex Sync] Season ${seasonNumber} exists but has no episodes, creating them...`)
+          
+          // Get episodes for this season
+          const traktSeason = await traktAPI.getSeasonEpisodes(traktShowId, seasonNumber)
+          console.log(`[Plex Sync] Found ${traktSeason.length} episodes for season ${seasonNumber}`)
+          
+          // Create all episodes for this season
+          for (const traktEpisode of traktSeason) {
+            try {
+              await prisma.episode.create({
+                data: {
+                  seasonId: season.id,
+                  episodeNumber: traktEpisode.number,
+                  traktId: traktEpisode.ids?.trakt,
+                  title: traktEpisode.title || `Episode ${traktEpisode.number}`,
+                  overview: traktEpisode.overview,
+                  airDate: traktEpisode.first_aired ? new Date(traktEpisode.first_aired) : null,
+                  runtime: traktEpisode.runtime
+                }
+              })
+            } catch (error) {
+              console.error(`[Plex Sync] Error creating episode S${seasonNumber}E${traktEpisode.number}:`, error)
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[Plex Sync] Error creating all episodes for show ${showId}:`, error)
   }
 }
 
@@ -226,8 +342,8 @@ async function syncEpisode(
   const seasonNumber = plexEpisode.parentIndex
   const episodeNumber = plexEpisode.index
 
-  // Find or create season
-  let season = await prisma.season.findFirst({
+  // Find the season by showId and seasonNumber
+  const season = await prisma.season.findFirst({
     where: {
       showId,
       seasonNumber
@@ -235,20 +351,12 @@ async function syncEpisode(
   })
 
   if (!season) {
-    // Fetch season from Trakt
-    const traktSeason = await traktAPI.getSeasonEpisodes(traktShowId, seasonNumber)
-    
-    season = await prisma.season.create({
-      data: {
-        showId,
-        seasonNumber,
-        episodeCount: traktSeason.length
-      }
-    })
+    console.error(`[Plex Sync] Season ${seasonNumber} not found for show ${showId}`)
+    return
   }
 
-  // Find or create episode
-  let episode = await prisma.episode.findFirst({
+  // Find the episode by seasonId and episodeNumber
+  const episode = await prisma.episode.findFirst({
     where: {
       seasonId: season.id,
       episodeNumber
@@ -256,33 +364,8 @@ async function syncEpisode(
   })
 
   if (!episode) {
-    // Fetch episode details from Trakt
-    try {
-      const traktEpisode = await traktAPI.getEpisode(traktShowId, seasonNumber, episodeNumber)
-      
-      episode = await prisma.episode.create({
-        data: {
-          seasonId: season.id,
-          episodeNumber,
-          title: traktEpisode.title || `Episode ${episodeNumber}`,
-          overview: traktEpisode.overview,
-          airDate: traktEpisode.first_aired ? new Date(traktEpisode.first_aired) : null,
-          runtime: traktEpisode.runtime
-        }
-      })
-    } catch (error) {
-      // If Trakt doesn't have the episode, create a basic one
-      episode = await prisma.episode.create({
-        data: {
-          seasonId: season.id,
-          episodeNumber,
-          title: plexEpisode.title || `Episode ${episodeNumber}`,
-          overview: plexEpisode.summary,
-          airDate: plexEpisode.year ? new Date(plexEpisode.year, 0, 1) : null,
-          runtime: null
-        }
-      })
-    }
+    console.error(`[Plex Sync] Episode S${seasonNumber}E${episodeNumber} not found for show ${showId}`)
+    return
   }
 
   // Mark as watched

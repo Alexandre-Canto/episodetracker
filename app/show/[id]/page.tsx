@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { apiGet, apiPost } from '@/lib/api-client'
+import { apiGet, apiPost, apiPatch } from '@/lib/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, AlertCircle, ArrowLeft, Star, Calendar, Clock, Tv, Users, Plus, Check } from 'lucide-react'
+import { Loader2, AlertCircle, ArrowLeft, Star, Calendar, Clock, Tv, Users, Plus, Check, Eye, EyeOff } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface Episode {
@@ -81,6 +81,7 @@ export default function ShowDetailPage() {
   const [error, setError] = useState('')
   const [addingShow, setAddingShow] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState('ongoing')
+  const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (showId) {
@@ -134,6 +135,55 @@ export default function ShowDetailPage() {
       setError('Network error')
     } finally {
       setAddingShow(false)
+    }
+  }
+
+  const handleEpisodeToggle = async (episodeId: string, currentWatched: boolean, seasonNumber: number, episodeNumber: number) => {
+    if (!show?.userShow) {
+      setError('Please add this show to your library first')
+      return
+    }
+
+    try {
+      setTogglingEpisodes(prev => new Set(prev).add(episodeId))
+      setError('')
+      
+      const response = await apiPatch(`/api/user/episodes/${episodeId}/watched`, {
+        watched: !currentWatched,
+        showId: show.id,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber
+      })
+
+      if (response.ok) {
+        // Update the local state
+        setShow(prev => {
+          if (!prev) return prev
+          
+          return {
+            ...prev,
+            seasons: prev.seasons.map(season => ({
+              ...season,
+              episodes: season.episodes.map(episode => 
+                episode.id === episodeId 
+                  ? { ...episode, watched: !currentWatched }
+                  : episode
+              )
+            }))
+          }
+        })
+      } else {
+        const data = await response.json()
+        setError(data.error || 'Failed to update episode')
+      }
+    } catch (error) {
+      setError('Network error')
+    } finally {
+      setTogglingEpisodes(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(episodeId)
+        return newSet
+      })
     }
   }
 
@@ -389,11 +439,36 @@ export default function ShowDetailPage() {
                                           <div className="flex-1 space-y-1">
                                             <div className="flex items-start justify-between gap-2">
                                               <h4 className="font-medium">{episode.title}</h4>
-                                              {episode.watched && (
-                                                <Badge variant="secondary" className="text-xs">
-                                                  Watched
-                                                </Badge>
-                                              )}
+                                              <div className="flex items-center gap-2">
+                                                {episode.watched && (
+                                                  <Badge variant="secondary" className="text-xs">
+                                                    Watched
+                                                  </Badge>
+                                                )}
+                                                {show.userShow && (
+                                                  <Button
+                                                    variant={episode.watched ? "outline" : "default"}
+                                                    size="sm"
+                                                    onClick={() => handleEpisodeToggle(episode.id, episode.watched, episode.seasonNumber, episode.episodeNumber)}
+                                                    disabled={togglingEpisodes.has(episode.id)}
+                                                    className="h-8 px-3"
+                                                  >
+                                                    {togglingEpisodes.has(episode.id) ? (
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : episode.watched ? (
+                                                      <>
+                                                        <EyeOff className="h-3 w-3 mr-1" />
+                                                        Mark Unseen
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <Eye className="h-3 w-3 mr-1" />
+                                                        Mark Seen
+                                                      </>
+                                                    )}
+                                                  </Button>
+                                                )}
+                                              </div>
                                             </div>
                                             {episode.overview && (
                                               <p className="text-sm text-muted-foreground line-clamp-2">

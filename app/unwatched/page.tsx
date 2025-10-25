@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { apiGet, apiPatch } from '@/lib/api-client'
+import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { Clock, Eye, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
+import { Clock, Eye, CheckCircle, Loader2, AlertCircle, Search, X, CheckSquare } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface Episode {
@@ -47,6 +48,8 @@ export default function UnwatchedPage() {
   const [error, setError] = useState('')
   const [totalUnwatched, setTotalUnwatched] = useState(0)
   const [totalRuntime, setTotalRuntime] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [markingSeries, setMarkingSeries] = useState(false)
 
   const fetchUnwatchedShows = async (preserveSelection = false) => {
     try {
@@ -113,9 +116,17 @@ export default function UnwatchedPage() {
   }
 
   const handleEpisodeToggle = async (episode: Episode) => {
+    if (!selectedShow) {
+      setError('No show selected')
+      return
+    }
+
     try {
       const response = await apiPatch(`/api/user/episodes/${episode.id}/watched`, {
-        watched: !episode.watched
+        watched: !episode.watched,
+        showId: selectedShow.id,
+        seasonNumber: episode.season.seasonNumber,
+        episodeNumber: episode.episodeNumber
       })
 
       if (response.ok) {
@@ -193,6 +204,53 @@ export default function UnwatchedPage() {
     return selectedShow.seasons.map(s => s.seasonNumber).sort((a, b) => a - b)
   }
 
+  const filterShows = (showsList: Show[]) => {
+    if (!searchQuery.trim()) return showsList
+    return showsList.filter(show => 
+      show.title.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }
+
+  const handleMarkSeriesWatched = async () => {
+    if (!selectedShow) return
+
+    try {
+      setMarkingSeries(true)
+      setError('')
+
+      // Get all episodes for the show with season context
+      const allEpisodes = selectedShow.seasons.flatMap(season => 
+        season.episodes.map(episode => ({ ...episode, seasonNumber: season.seasonNumber }))
+      )
+      
+      // Mark all unwatched episodes as watched
+      const unwatchedEpisodes = allEpisodes.filter(episode => !episode.watched)
+      
+      console.log(`Marking ${unwatchedEpisodes.length} episodes as watched for ${selectedShow.title}`)
+
+      // Update each unwatched episode
+      for (const episode of unwatchedEpisodes) {
+        try {
+          await apiPatch(`/api/user/episodes/${episode.id}/watched`, {
+            watched: true,
+            showId: selectedShow.id,
+            seasonNumber: episode.seasonNumber,
+            episodeNumber: episode.episodeNumber
+          })
+        } catch (error) {
+          console.error(`Failed to mark episode ${episode.id} as watched:`, error)
+        }
+      }
+
+      // Refresh the data
+      await fetchUnwatchedShows(true)
+    } catch (error) {
+      setError('Failed to mark series as watched')
+    } finally {
+      setMarkingSeries(false)
+    }
+  }
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -246,11 +304,33 @@ export default function UnwatchedPage() {
                 <CardHeader>
                   <CardTitle className="text-base">Your Shows</CardTitle>
                   <CardDescription>Select a show to view episodes</CardDescription>
+                  
+                  {/* Search Bar */}
+                  <div className="relative mt-4">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search shows by name..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 pr-10"
+                    />
+                    {searchQuery && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
+                        onClick={() => setSearchQuery('')}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <ScrollArea className="h-[600px]">
                     <div className="space-y-1 p-4">
-                      {shows.map((show) => {
+                      {filterShows(shows).map((show) => {
                         const posterUrl = show.poster || '/placeholder-poster.jpg'
                         return (
                         <button
@@ -298,42 +378,67 @@ export default function UnwatchedPage() {
                         <CardTitle>{selectedShow.title}</CardTitle>
                         <CardDescription>Season {selectedSeason}</CardDescription>
                       </div>
-                      <Button
-                        onClick={handleSeasonMarkWatched}
-                        disabled={getUnwatchedEpisodes().length === 0}
-                        size="sm"
-                      >
-                        <CheckCircle className="mr-2 h-4 w-4" />
-                        Mark Season Watched
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={handleMarkSeriesWatched}
+                          disabled={markingSeries || selectedShow.seasons.flatMap(s => s.episodes).filter(e => !e.watched).length === 0}
+                          size="sm"
+                          variant="outline"
+                        >
+                          {markingSeries ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckSquare className="mr-2 h-4 w-4" />
+                          )}
+                          Mark Series Watched
+                        </Button>
+                        <Button
+                          onClick={handleSeasonMarkWatched}
+                          disabled={getUnwatchedEpisodes().length === 0}
+                          size="sm"
+                        >
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Mark Season Watched
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <Tabs
-                      value={selectedSeason.toString()}
-                      onValueChange={(value) => setSelectedSeason(parseInt(value))}
-                    >
-                      <TabsList className="mb-4">
-                        {getAvailableSeasons().map((seasonNum) => (
-                          <TabsTrigger key={seasonNum} value={seasonNum.toString()}>
-                            Season {seasonNum}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
-
-                      {getAvailableSeasons().map((seasonNum) => (
-                        <TabsContent key={seasonNum} value={seasonNum.toString()}>
-                          {getUnwatchedEpisodes().length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                              <CheckCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                              <p className="text-lg font-medium">All caught up!</p>
-                              <p className="text-sm text-muted-foreground">
-                                No unwatched episodes in this season
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              {getUnwatchedEpisodes().map((episode) => (
+                  <CardContent className="p-0">
+                    <div className="h-[600px] flex flex-col">
+                      <div className="p-4 pb-0">
+                        <Tabs
+                          value={selectedSeason.toString()}
+                          onValueChange={(value) => setSelectedSeason(parseInt(value))}
+                        >
+                          <TabsList className="mb-4">
+                            {getAvailableSeasons().map((seasonNum) => (
+                              <TabsTrigger key={seasonNum} value={seasonNum.toString()}>
+                                Season {seasonNum}
+                              </TabsTrigger>
+                            ))}
+                          </TabsList>
+                        </Tabs>
+                      </div>
+                      
+                      <div className="flex-1 overflow-hidden">
+                        <Tabs
+                          value={selectedSeason.toString()}
+                          onValueChange={(value) => setSelectedSeason(parseInt(value))}
+                        >
+                          {getAvailableSeasons().map((seasonNum) => (
+                            <TabsContent key={seasonNum} value={seasonNum.toString()} className="h-full">
+                              {getUnwatchedEpisodes().length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center h-full">
+                                  <CheckCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                                  <p className="text-lg font-medium">All caught up!</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    No unwatched episodes in this season
+                                  </p>
+                                </div>
+                              ) : (
+                                <ScrollArea className="h-full">
+                                  <div className="space-y-4 p-4">
+                                    {getUnwatchedEpisodes().map((episode) => (
                                 <div
                                   key={episode.id}
                                   className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
@@ -362,12 +467,15 @@ export default function UnwatchedPage() {
                                     )}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                        </TabsContent>
-                      ))}
-                    </Tabs>
+                                    ))}
+                                  </div>
+                                </ScrollArea>
+                              )}
+                            </TabsContent>
+                          ))}
+                        </Tabs>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )}
