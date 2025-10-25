@@ -30,6 +30,16 @@ interface Episode {
   }
 }
 
+interface Show {
+  id: string
+  title: string
+  poster: string
+  status: string
+  rating: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 interface ShowWithEpisodes {
   showId: string
   showTitle: string
@@ -38,11 +48,34 @@ interface ShowWithEpisodes {
   totalWatched: number
 }
 
+interface Statistics {
+  totalEpisodesWatched: number
+  totalShowsTracked: number
+  totalEpisodesTracked: number
+  totalWatchedShows: number
+  timeWatched: {
+    totalMinutes: number
+    hours: number
+    minutes: number
+    days: number
+    months: number
+    formatted: {
+      months: number
+      days: number
+      hours: number
+      minutes: number
+    }
+  }
+}
+
 export default function ProfilePage() {
   const [episodes, setEpisodes] = useState<Episode[]>([])
+  const [shows, setShows] = useState<Show[]>([])
+  const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedShows, setExpandedShows] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'watched' | 'tracked'>('watched')
   const { user } = useAuth()
 
   useEffect(() => {
@@ -59,6 +92,8 @@ export default function ProfilePage() {
       
       if (response.ok) {
         setEpisodes(data.episodes || [])
+        setShows(data.shows || [])
+        setStatistics(data.statistics || null)
       } else {
         setError(data.error || 'Failed to fetch profile')
       }
@@ -151,17 +186,60 @@ export default function ProfilePage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-6">
-                  <div>
-                    <p className="text-2xl font-bold">{episodes.length}</p>
-                    <p className="text-sm text-muted-foreground">Episodes Watched</p>
+                {statistics && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div>
+                      <p className="text-2xl font-bold">{statistics.totalEpisodesWatched}</p>
+                      <p className="text-sm text-muted-foreground">Episodes Watched</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{statistics.totalShowsTracked}</p>
+                      <p className="text-sm text-muted-foreground">Shows Tracked</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{statistics.totalWatchedShows}</p>
+                      <p className="text-sm text-muted-foreground">Shows Watched</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{statistics.totalEpisodesTracked}</p>
+                      <p className="text-sm text-muted-foreground">Total Episodes</p>
+                    </div>
                   </div>
-                  <Separator orientation="vertical" className="h-12" />
-                  <div>
-                    <p className="text-2xl font-bold">{showsWithEpisodes.length}</p>
-                    <p className="text-sm text-muted-foreground">Shows</p>
+                )}
+                
+                {statistics && (
+                  <div className="mt-6 pt-6 border-t">
+                    <h3 className="text-lg font-semibold mb-4">Time Spent Watching</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {statistics.timeWatched.formatted.months > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-primary">{statistics.timeWatched.formatted.months}</p>
+                          <p className="text-sm text-muted-foreground">Months</p>
+                        </div>
+                      )}
+                      {statistics.timeWatched.formatted.days > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-primary">{statistics.timeWatched.formatted.days}</p>
+                          <p className="text-sm text-muted-foreground">Days</p>
+                        </div>
+                      )}
+                      {statistics.timeWatched.formatted.hours > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-primary">{statistics.timeWatched.formatted.hours}</p>
+                          <p className="text-sm text-muted-foreground">Hours</p>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-primary">{statistics.timeWatched.formatted.minutes}</p>
+                        <p className="text-sm text-muted-foreground">Minutes</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2 text-center">
+                      Total: {statistics.timeWatched.totalMinutes.toLocaleString()} minutes 
+                      ({statistics.timeWatched.hours.toLocaleString()} hours)
+                    </p>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -173,123 +251,206 @@ export default function ProfilePage() {
             </Alert>
           )}
 
-          {/* Watched Shows */}
+          {/* Tabs */}
+          <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
+            <button
+              onClick={() => setActiveTab('watched')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'watched'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Watched Episodes
+            </button>
+            <button
+              onClick={() => setActiveTab('tracked')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'tracked'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Tracked Shows
+            </button>
+          </div>
+
+          {/* Content */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Watched Shows</CardTitle>
+                  <CardTitle>
+                    {activeTab === 'watched' ? 'Watched Episodes' : 'Tracked Shows'}
+                  </CardTitle>
                   <CardDescription>
-                    {showsWithEpisodes.length} shows with {episodes.length} watched episodes
+                    {activeTab === 'watched' 
+                      ? `${showsWithEpisodes.length} shows with ${episodes.length} watched episodes`
+                      : `${shows.length} shows you're tracking`
+                    }
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={expandAll}>
-                    Expand All
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={collapseAll}>
-                    Collapse All
-                  </Button>
-                </div>
+                {activeTab === 'watched' && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={expandAll}>
+                      Expand All
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={collapseAll}>
+                      Collapse All
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent>
-              {showsWithEpisodes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <CheckCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium">No watched episodes yet</p>
-                  <p className="text-sm text-muted-foreground">
-                    Start watching shows to see your history
-                  </p>
-                </div>
-              ) : (
-                <ScrollArea className="h-[600px]">
-                  <div className="space-y-3">
-                    {showsWithEpisodes.map((show) => {
-                      const isExpanded = expandedShows.has(show.showId)
-                      // Sort episodes by season and episode number
-                      const sortedEpisodes = [...show.episodes].sort((a, b) => {
-                        if (a.season.seasonNumber !== b.season.seasonNumber) {
-                          return a.season.seasonNumber - b.season.seasonNumber
-                        }
-                        return a.episodeNumber - b.episodeNumber
-                      })
+              {activeTab === 'watched' ? (
+                // Watched Episodes Tab
+                showsWithEpisodes.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <CheckCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-lg font-medium">No watched episodes yet</p>
+                    <p className="text-sm text-muted-foreground">
+                      Start watching shows to see your history
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[600px]">
+                    <div className="space-y-3">
+                      {showsWithEpisodes.map((show) => {
+                        const isExpanded = expandedShows.has(show.showId)
+                        // Sort episodes by season and episode number
+                        const sortedEpisodes = [...show.episodes].sort((a, b) => {
+                          if (a.season.seasonNumber !== b.season.seasonNumber) {
+                            return a.season.seasonNumber - b.season.seasonNumber
+                          }
+                          return a.episodeNumber - b.episodeNumber
+                        })
 
-                      return (
-                        <Card key={show.showId} className="overflow-hidden">
-                          <div
-                            className="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/50 transition-colors"
-                            onClick={() => toggleShow(show.showId)}
-                          >
+                        return (
+                          <Card key={show.showId} className="overflow-hidden">
+                            <div
+                              className="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                              onClick={() => toggleShow(show.showId)}
+                            >
+                              {show.poster && (
+                                <img
+                                  src={show.poster}
+                                  alt={show.showTitle}
+                                  className="h-20 w-14 object-cover rounded"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement
+                                    target.src = '/placeholder-poster.jpg'
+                                  }}
+                                />
+                              )}
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-lg">{show.showTitle}</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {show.totalWatched} episodes watched
+                                  </Badge>
+                                  <p className="text-xs text-muted-foreground">
+                                    Last watched: {format(
+                                      new Date(Math.max(...show.episodes.map(e => new Date(e.watchedAt).getTime()))),
+                                      'MMM d, yyyy'
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                              {isExpanded ? (
+                                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </div>
+
+                            {isExpanded && (
+                              <div className="border-t bg-muted/30">
+                                <div className="p-4 space-y-2">
+                                  {sortedEpisodes.map((episode) => (
+                                    <div
+                                      key={episode.id}
+                                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                                    >
+                                      <div className="flex-1 space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-xs">
+                                            S{episode.season.seasonNumber}E{episode.episodeNumber}
+                                          </Badge>
+                                          <p className="font-medium text-sm">{episode.title}</p>
+                                        </div>
+                                        {episode.airDate && (
+                                          <p className="text-xs text-muted-foreground">
+                                            Aired: {format(new Date(episode.airDate), 'MMM d, yyyy')}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-xs text-muted-foreground">
+                                          Watched: {format(new Date(episode.watchedAt), 'MMM d, yyyy')}
+                                        </p>
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  </ScrollArea>
+                )
+              ) : (
+                // Tracked Shows Tab
+                shows.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <User className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-lg font-medium">No shows tracked yet</p>
+                    <p className="text-sm text-muted-foreground">
+                      Add shows to your watchlist to see them here
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[600px]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {shows.map((show) => (
+                        <Card key={show.id} className="overflow-hidden">
+                          <div className="flex items-start gap-4 p-4">
                             {show.poster && (
                               <img
                                 src={show.poster}
-                                alt={show.showTitle}
-                                className="h-20 w-14 object-cover rounded"
+                                alt={show.title}
+                                className="h-24 w-16 object-cover rounded"
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement
                                   target.src = '/placeholder-poster.jpg'
                                 }}
                               />
                             )}
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg">{show.showTitle}</h3>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="secondary" className="text-xs">
-                                  {show.totalWatched} episodes watched
+                            <div className="flex-1 space-y-2">
+                              <h3 className="font-semibold text-lg line-clamp-2">{show.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {show.status}
                                 </Badge>
-                                <p className="text-xs text-muted-foreground">
-                                  Last watched: {format(
-                                    new Date(Math.max(...show.episodes.map(e => new Date(e.watchedAt).getTime()))),
-                                    'MMM d, yyyy'
-                                  )}
-                                </p>
+                                {show.rating && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    ⭐ {show.rating}/10
+                                  </Badge>
+                                )}
                               </div>
+                              <p className="text-xs text-muted-foreground">
+                                Added: {format(new Date(show.createdAt), 'MMM d, yyyy')}
+                              </p>
                             </div>
-                            {isExpanded ? (
-                              <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                            )}
                           </div>
-
-                          {isExpanded && (
-                            <div className="border-t bg-muted/30">
-                              <div className="p-4 space-y-2">
-                                {sortedEpisodes.map((episode) => (
-                                  <div
-                                    key={episode.id}
-                                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                                  >
-                                    <div className="flex-1 space-y-1">
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-xs">
-                                          S{episode.season.seasonNumber}E{episode.episodeNumber}
-                                        </Badge>
-                                        <p className="font-medium text-sm">{episode.title}</p>
-                                      </div>
-                                      {episode.airDate && (
-                                        <p className="text-xs text-muted-foreground">
-                                          Aired: {format(new Date(episode.airDate), 'MMM d, yyyy')}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-xs text-muted-foreground">
-                                        Watched: {format(new Date(episode.watchedAt), 'MMM d, yyyy')}
-                                      </p>
-                                      <CheckCircle className="h-4 w-4 text-green-500" />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                         </Card>
-                      )
-                    })}
-                  </div>
-                </ScrollArea>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )
               )}
             </CardContent>
           </Card>
