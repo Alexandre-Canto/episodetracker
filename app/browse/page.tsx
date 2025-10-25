@@ -406,7 +406,7 @@ export default function BrowsePage() {
                           }}
                         >
                           <Plus className="mr-2 h-4 w-4" />
-                          Add Show
+                          Add to My Shows
                         </Button>
                       </CardFooter>
                     </Card>
@@ -421,7 +421,7 @@ export default function BrowsePage() {
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add Show to My Shows</DialogTitle>
+              <DialogTitle>Add to My Shows</DialogTitle>
               <DialogDescription>
                 Choose which list to add {selectedShow?.title} to
               </DialogDescription>
@@ -446,7 +446,7 @@ export default function BrowsePage() {
               <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddShow}>Add Show</Button>
+              <Button onClick={handleAddShow}>Add to My Shows</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

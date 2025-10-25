@@ -21,8 +21,9 @@ export async function GET(
     // Check if this is a Trakt ID (numeric) or a database ID
     const isTraktId = /^\d+$/.test(showId)
     
-    let traktId: number
+    let traktId: number | null = null
     let userShow = null
+    let dbShow = null
 
     // Try to get user info if authenticated
     const user = await getAuthenticatedUser(request)
@@ -31,9 +32,22 @@ export async function GET(
     if (isTraktId) {
       traktId = parseInt(showId)
     } else {
-      // It's a database show ID, fetch the show to get traktId
-      const dbShow = await prisma.show.findUnique({
-        where: { id: showId }
+      // It's a database show ID, fetch the show
+      dbShow = await prisma.show.findUnique({
+        where: { id: showId },
+        include: {
+          seasons: {
+            include: {
+              episodes: {
+                include: {
+                  userEpisodes: {
+                    where: userId ? { userId: userId } : undefined
+                  }
+                }
+              }
+            }
+          }
+        }
       })
       
       if (!dbShow) {
@@ -59,6 +73,56 @@ export async function GET(
           }
         })
       }
+    }
+
+    // If we have database show data, use it instead of fetching from Trakt
+    if (dbShow) {
+      // Use database data
+      const show = {
+        id: showId,
+        traktId: dbShow.traktId,
+        title: dbShow.title,
+        overview: dbShow.overview,
+        poster: dbShow.poster,
+        year: dbShow.firstAired ? new Date(dbShow.firstAired).getFullYear() : null,
+        status: dbShow.status,
+        network: dbShow.network,
+        genres: dbShow.genres || [],
+        runtime: dbShow.runtime,
+        rating: 0, // Default rating
+        votes: 0, // Default votes
+        trailer: null,
+        firstAired: dbShow.firstAired,
+        country: null,
+        language: 'en',
+        airedEpisodes: dbShow.seasons.reduce((total, season) => total + season.episodes.length, 0),
+        seasons: dbShow.seasons.map(season => ({
+          seasonNumber: season.seasonNumber,
+          episodeCount: season.episodes.length,
+          episodes: season.episodes.map(episode => ({
+            id: episode.id,
+            title: episode.title,
+            overview: episode.overview || '',
+            episodeNumber: episode.episodeNumber,
+            seasonNumber: season.seasonNumber,
+            airDate: episode.airDate,
+            runtime: episode.runtime || dbShow.runtime,
+            watched: episode.userEpisodes.length > 0 ? episode.userEpisodes[0].watched : false
+          }))
+        })),
+        cast: [], // No cast data from database
+        userShow: userShow
+      }
+
+      return NextResponse.json({ show })
+    }
+
+    // Fallback to Trakt API for external shows
+    if (!traktId) {
+      return NextResponse.json(
+        { error: 'Invalid show ID' },
+        { status: 400 }
+      )
     }
 
     // Fetch show details from Trakt
